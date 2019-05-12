@@ -4,22 +4,44 @@
 
 using namespace std;
 
-typedef uint32_t WORD;
+typedef unsigned int WORD;
 
-int regularRS() {
-	return 0;
+const WORD ShR(const WORD A, const WORD n) {
+	return A >> n;
 }
 
-int circularRS() {
-	return 0;
+const WORD RotR(const WORD A, const WORD n) {
+	return (A >> n) | (A << (32 - n));
+}
+
+const WORD sigma0(const WORD X) {
+	return RotR(X, 7) ^ RotR(X, 18) ^ ShR(X, 3);
+}
+
+const WORD sigma1(const WORD X) {
+	return RotR(X, 17) ^ RotR(X, 19) ^ ShR(X, 10);
 }
 
 int shaFunc() {
 	return 0;
 }
 
-int schedMessage() {
-	return 0;
+vector<WORD> schedMessage(vector<WORD> block) {
+	vector<WORD> W(64);
+
+	for(int i=0; i<16; i++) {
+		W[i] = block[i];
+	}
+
+	for(int i=16; i<64; i++) {
+		W[i] = sigma1(W[i-2]) + W[i-7] + sigma0(W[i-15]) + W[i-16];
+	}
+
+	for(auto it:W){
+		cout << hex<<it<<endl;
+	}
+
+	return W;
 }
 
 vector<WORD> padMessage(string msg) {
@@ -70,14 +92,26 @@ vector<WORD> padMessage(string msg) {
 vector<vector<WORD>> parseMessage(vector<WORD> paddedMsg) {
 	size_t paddedLen = paddedMsg.size() * 8;
 	size_t numBlocks = paddedLen/512;
-
+	
 	vector<vector<WORD>> N;
 	vector<WORD> blocks;
 
+	int msgIndex = 0;
+	
 	for(int i=0; i<numBlocks; i++) {
-		for(int j=0; j<64; j++) {
-			blocks.push_back(paddedMsg[j]);
+
+		for(int j=0; j<16; j++) {
+
+			WORD word = 0;
+			for(int k=msgIndex; k<msgIndex+4; k++) {
+				word <<= 8;
+				word |= paddedMsg[k];
+			}
+
+			msgIndex += 4;
+			blocks.push_back(word);
 		}
+
 		N.push_back(blocks);
 		blocks.clear();
 	}
@@ -93,10 +127,13 @@ int main() {
 	vector<WORD> paddedMsg = padMessage(str);
 
 	cout << paddedMsg.size() << endl;
+
 	cout << "Pad ok" << endl;
 
 	vector<vector<WORD>> N = parseMessage(paddedMsg);
 
-	cout << N.size() << endl;
-	cout << "Split to block ok" << endl;
+	cout << "Parse ok" << endl;
+
+	schedMessage(N[0]);
+	
 }
