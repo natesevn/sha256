@@ -62,15 +62,22 @@ vector<WORD> SHA256::schedMessage(vector<WORD> block) {
 	return W;
 }
 
+vector<WORD> SHA256::hexToBytes(const string hex) {
+	vector<WORD> bytes;
+
+	for (unsigned int i = 0; i < hex.length(); i += 2) {
+		string byteString = hex.substr(i, 2);
+		WORD byte = strtoul(byteString.c_str(), NULL, 16);
+		bytes.push_back(byte);
+	}
+
+  return bytes;
+}
+
 vector<WORD> SHA256::padMessage(string hexmsg) {
 
 	// String to byte vector
-	vector<WORD> byteStr;
-	int str_len = hexmsg.length();
-	for(int i=0; i<str_len; i+=2) {
-		unsigned char byte = stoi(hexmsg.substr(i, 2), nullptr, 16);
-		byteStr.push_back(byte);
-	}
+	vector<WORD> byteStr = hexToBytes(hexmsg);
 
 	size_t msgLen = byteStr.size() * 8;
 	size_t padLen = msgLen;

@@ -11,6 +11,7 @@ typedef unsigned int WORD;
 class SHA256 {
 	public:
 		static string sha_hash(string str);
+		static vector<WORD> hexToBytes(const string hex);
 
 	private:
 
