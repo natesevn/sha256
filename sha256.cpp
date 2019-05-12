@@ -63,7 +63,7 @@ vector<WORD> schedMessage(vector<WORD> block) {
 	return W;
 }
 
-int shaFunc(vector<vector<WORD>> N) {
+array<WORD, 8> shaFunc(vector<vector<WORD>> N) {
 
 	// Initialize H values
 	// Updated H
@@ -117,11 +117,8 @@ int shaFunc(vector<vector<WORD>> N) {
 		H_UPD[7] = H_INT[7] + h;
 	}
 
-	for (auto it : H_UPD) {
-			cout << hex << setw(8) << setfill('0') << it << " ";
-		}
 
-	return 0;
+	return H_UPD;
 }
 
 vector<WORD> padMessage(string msg) {
@@ -202,7 +199,7 @@ vector<vector<WORD>> parseMessage(vector<WORD> paddedMsg) {
 
 int main() {
 
-	string str = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
+	string str = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu";
 
 	vector<WORD> paddedMsg = padMessage(str);
 
@@ -214,6 +211,13 @@ int main() {
 
 	cout << "Parse ok" << endl;
 
-	shaFunc(N);
+	array<WORD, 8> H = shaFunc(N);
+
+	stringstream stream;
+	for (auto it : H) {
+		stream << setfill ('0') << setw(8) << hex << it << " ";
+	}
+
+	cout << "Hash is: " << stream.str() << endl;
 	
 }
