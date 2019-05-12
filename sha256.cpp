@@ -3,10 +3,9 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <sha256.h>
 
 using namespace std;
-
-typedef unsigned int WORD;
 
 const WORD K[] = {0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
                   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
@@ -17,39 +16,39 @@ const WORD K[] = {0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x
                   0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
                   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
 
-constexpr WORD ShR(const WORD A, const WORD n) {
+constexpr WORD SHA256::ShR(const WORD A, const WORD n) {
 	return A >> n;
 }
 
-constexpr WORD RotR(const WORD A, const WORD n) {
+constexpr WORD SHA256::RotR(const WORD A, const WORD n) {
 	return (A >> n) | (A << (32 - n));
 }
 
-constexpr WORD Ch(const WORD X, const WORD Y, const WORD Z) {
+constexpr WORD SHA256::Ch(const WORD X, const WORD Y, const WORD Z) {
 	return (X & Y) ^ (~X & Z);
 }
 
-constexpr WORD Maj(const WORD X, const WORD Y, const WORD Z) {
+constexpr WORD SHA256::Maj(const WORD X, const WORD Y, const WORD Z) {
 	return (X & Y) ^ (X & Z) ^ (Y & Z);
 }
 
-constexpr WORD capsigma0(const WORD X){
+constexpr WORD SHA256::capsigma0(const WORD X) {
 	return RotR(X, 2) ^ RotR(X, 13) ^ RotR(X, 22);
 }
 
-constexpr WORD capsigma1(const WORD X) {
+constexpr WORD SHA256::capsigma1(const WORD X) {
 	return RotR(X, 6) ^ RotR(X, 11) ^ RotR(X, 25);
 }
 
-constexpr WORD sigma0(const WORD X) {
+constexpr WORD SHA256::sigma0(const WORD X) {
 	return RotR(X, 7) ^ RotR(X, 18) ^ ShR(X, 3);
 }
 
-constexpr WORD sigma1(const WORD X) {
+constexpr WORD SHA256::sigma1(const WORD X) {
 	return RotR(X, 17) ^ RotR(X, 19) ^ ShR(X, 10);
 }
 
-vector<WORD> schedMessage(vector<WORD> block) {
+vector<WORD> SHA256::schedMessage(vector<WORD> block) {
 	vector<WORD> W(64);
 
 	for(int i=0; i<16; i++) {
@@ -63,7 +62,86 @@ vector<WORD> schedMessage(vector<WORD> block) {
 	return W;
 }
 
-array<WORD, 8> shaFunc(vector<vector<WORD>> N) {
+vector<WORD> SHA256::padMessage(string msg) {
+
+	// String to byte vector
+	vector<WORD> byteStr(msg.begin(), msg.end());
+
+	size_t msgLen = byteStr.size() * 8;
+	size_t padLen = msgLen;
+
+	// Determine num bits to pad
+	while(padLen > 512) {
+		padLen = padLen - 512;
+	}
+
+	// Padding
+	size_t k;
+	
+	// Figure out how many bytes of 0 to add 
+	if(padLen % 512 != 0) {
+
+		// If not enough space for 1-bit + 64-bit msg size, add another block
+		if((512 - padLen) < 65) {
+			k = 960 - (padLen + 8);
+		} else {
+			k = 448 - (padLen + 8);
+		}
+	} else {
+		k = 440;
+	}
+
+	// Push 1 followed by 0s
+	byteStr.push_back(0x80);
+	for(int i=0; i<k/8; i++) {
+		byteStr.push_back(0x0);
+	}
+
+	// Pad with msg size in 64 bits
+	for (int i=1; i<9; ++i) {
+		byteStr.push_back(msgLen >> (64 - i * 8));
+	}
+	
+	return byteStr;
+}
+
+// Break message into 512-bit blocks
+vector<vector<WORD>> SHA256::parseMessage(vector<WORD> paddedMsg) {
+	size_t paddedLen = paddedMsg.size() * 8;
+	size_t numBlocks = paddedLen/512;
+	
+	vector<vector<WORD>> N;
+	vector<WORD> blocks;
+
+	int msgIndex = 0;
+	
+	for(int i=0; i<numBlocks; i++) {
+
+		for(int j=0; j<16; j++) {
+
+			// Create 32 bit words from 8 bit parts of message
+			WORD word = 0;
+			for(int k=msgIndex; k<msgIndex+4; k++) {
+				word <<= 8;
+				word |= paddedMsg[k];
+			}
+
+			msgIndex += 4;
+			blocks.push_back(word);
+		}
+
+		N.push_back(blocks);
+		blocks.clear();
+	}
+	
+	return N;
+}
+
+string SHA256::sha_hash(string str) {
+
+	// Prepare string 
+	vector<WORD> paddedMsg = padMessage(str);
+	vector<vector<WORD>> N = parseMessage(paddedMsg);
 
 	// Initialize H values
 	// Updated H
@@ -117,107 +195,10 @@ array<WORD, 8> shaFunc(vector<vector<WORD>> N) {
 		H_UPD[7] = H_INT[7] + h;
 	}
 
-
-	return H_UPD;
-}
-
-vector<WORD> padMessage(string msg) {
-
-	// String to byte vector
-	vector<WORD> byteStr(msg.begin(), msg.end());
-
-	size_t msgLen = byteStr.size() * 8;
-	size_t padLen = msgLen;
-
-	// Determine num bits to pad
-	while(padLen > 512) {
-		padLen = padLen - 512;
-	}
-
-	// Padding
-	size_t k;
-	
-	// Figure out how many bytes of 0 to add 
-	if(padLen % 512 != 0) {
-
-		// If not enough space for 1-bit + 64-bit msg size, add another block
-		if((512 - padLen) < 65) {
-			k = 960 - (padLen + 8);
-		} else {
-			k = 448 - (padLen + 8);
-		}
-	} else {
-		k = 440;
-	}
-
-	// Push 1 followed by 0s
-	byteStr.push_back(0x80);
-	for(int i=0; i<k/8; i++) {
-		byteStr.push_back(0x0);
-	}
-
-	// Pad with msg size in 64 bits
-	for (int i=1; i<9; ++i) {
-		byteStr.push_back(msgLen >> (64 - i * 8));
-	}
-	
-	return byteStr;
-}
-
-// Break message into 512-bit blocks
-vector<vector<WORD>> parseMessage(vector<WORD> paddedMsg) {
-	size_t paddedLen = paddedMsg.size() * 8;
-	size_t numBlocks = paddedLen/512;
-	
-	vector<vector<WORD>> N;
-	vector<WORD> blocks;
-
-	int msgIndex = 0;
-	
-	for(int i=0; i<numBlocks; i++) {
-
-		for(int j=0; j<16; j++) {
-
-			// Create 32 bit words from 8 bit parts of message
-			WORD word = 0;
-			for(int k=msgIndex; k<msgIndex+4; k++) {
-				word <<= 8;
-				word |= paddedMsg[k];
-			}
-
-			msgIndex += 4;
-			blocks.push_back(word);
-		}
-
-		N.push_back(blocks);
-		blocks.clear();
-	}
-	
-	return N;
-}
-
-
-int main() {
-
-	string str = "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu";
-
-	vector<WORD> paddedMsg = padMessage(str);
-
-	cout << paddedMsg.size() << endl;
-
-	cout << "Pad ok" << endl;
-
-	vector<vector<WORD>> N = parseMessage(paddedMsg);
-
-	cout << "Parse ok" << endl;
-
-	array<WORD, 8> H = shaFunc(N);
-
 	stringstream stream;
-	for (auto it : H) {
-		stream << setfill ('0') << setw(8) << hex << it << " ";
+	for (auto it : H_UPD) {
+		stream << setfill ('0') << setw(8) << hex << it;
 	}
 
-	cout << "Hash is: " << stream.str() << endl;
-	
+	return stream.str();
 }
