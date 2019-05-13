@@ -7,6 +7,7 @@
 
 using namespace std;
 
+// SHA256 compression function helpers and constants
 const WORD K[] = {0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
                   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
                   0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
@@ -48,13 +49,16 @@ constexpr WORD SHA256::sigma1(const WORD X) {
 	return RotR(X, 17) ^ RotR(X, 19) ^ ShR(X, 10);
 }
 
+// Message scheduler
 vector<WORD> SHA256::schedMessage(vector<WORD> block) {
 	vector<WORD> W(64);
 
+	// First 16 blocks is the message split into words
 	for(int i=0; i<16; i++) {
 		W[i] = block[i];
 	}
 
+	// Rest of the blocks 
 	for(int i=16; i<64; i++) {
 		W[i] = sigma1(W[i-2]) + W[i-7] + sigma0(W[i-15]) + W[i-16];
 	}
@@ -62,6 +66,7 @@ vector<WORD> SHA256::schedMessage(vector<WORD> block) {
 	return W;
 }
 
+// Hex to byte array
 vector<WORD> SHA256::hexToBytes(const string hex) {
 	vector<WORD> bytes;
 
@@ -74,6 +79,7 @@ vector<WORD> SHA256::hexToBytes(const string hex) {
   return bytes;
 }
 
+// Pads message
 vector<WORD> SHA256::padMessage(string hexmsg) {
 
 	// String to byte vector
@@ -82,35 +88,40 @@ vector<WORD> SHA256::padMessage(string hexmsg) {
 	size_t msgLen = byteStr.size() * 8;
 	size_t padLen = msgLen;
 
-	// Determine num bits to pad
+	// Determine num bits to pad by checking size of the "last" block
 	while(padLen > 512) {
 		padLen = padLen - 512;
 	}
 
-	// Padding
+	// Number of "0x0" bytes to add
 	size_t k;
 	
-	// Figure out how many bytes of 0 to add 
+	// Figure out how many bytes of 0 to add to get a 512-bit block 
 	if(padLen % 512 != 0) {
 
-		// If not enough space for 1-bit + 64-bit msg size, add another block
+		// If not enough space to add 1-bit + 64-bit msg size, add another block
+		// Find remaining space to fill with 0x0 bytes
 		if((512 - padLen) < 65) {
 			k = 960 - (padLen + 8);
 		} else {
 			k = 448 - (padLen + 8);
 		}
+
+	// Last block is 512 bits; add another 512-bit block composed of:
+	// 8 bits for 0x80, 440 bits for 0x0, 64 bits for message length
 	} else {
 		k = 440;
 	}
 
-	// Push 1 followed by 0s
+	// Push 1 followed by k 0x0 bytes
 	byteStr.push_back(0x80);
 	for(int i=0; i<k/8; i++) {
 		byteStr.push_back(0x0);
 	}
 
-	// Pad with msg size in 64 bits
-	for (int i=1; i<9; ++i) {
+	// Push message length in 64 bits
+	// 8 iterations of 8-bits each
+	for (int i=1; i<9; i++) {
 		byteStr.push_back(msgLen >> (64 - i * 8));
 	}
 	
@@ -118,7 +129,7 @@ vector<WORD> SHA256::padMessage(string hexmsg) {
 }
 
 // Break message into 512-bit blocks
-vector<vector<WORD>> SHA256::parseMessage(vector<WORD> paddedMsg) {
+vector<vector<WORD>> SHA256::decomposeMessage(vector<WORD> paddedMsg) {
 	size_t paddedLen = paddedMsg.size() * 8;
 	size_t numBlocks = paddedLen/512;
 	
@@ -129,9 +140,10 @@ vector<vector<WORD>> SHA256::parseMessage(vector<WORD> paddedMsg) {
 	
 	for(int i=0; i<numBlocks; i++) {
 
+		// Creates a vector of 16x32=512 bit blocks of message
 		for(int j=0; j<16; j++) {
 
-			// Create 32 bit words from 8 bit parts of message
+			// Combine 4 bytes of message to form 32-bit word
 			WORD word = 0;
 			for(int k=msgIndex; k<msgIndex+4; k++) {
 				word <<= 8;
@@ -149,21 +161,24 @@ vector<vector<WORD>> SHA256::parseMessage(vector<WORD> paddedMsg) {
 	return N;
 }
 
+// SHA256
 string SHA256::sha_hash(string hexstr) {
 
 	// Prepare string 
 	vector<WORD> paddedMsg = padMessage(hexstr);
-	vector<vector<WORD>> N = parseMessage(paddedMsg);
+	vector<vector<WORD>> N = decomposeMessage(paddedMsg);
 
 	// Initialize H values
-	// Updated H
+	// Updated H is initialized with H0
 	array<WORD, 8> H_UPD = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
 	// Intermediate H
 	array<WORD, 8> H_INT = {0,0,0,0,0,0,0,0};
 
+	// Registers for compression function
 	WORD a,b,c,d,e,f,g,h;
 	WORD T1, T2;
 
+	// For each block..
 	for(int i=0; i<N.size(); i++) {
 
 		// Get message schedule
@@ -172,7 +187,7 @@ string SHA256::sha_hash(string hexstr) {
 		// Update intermediate H with updated H
 		H_INT = H_UPD;
 
-		// Initialize registers with intermediate hash value
+		// Initialize registers with intermediate H
 		a = H_INT[0];
 		b = H_INT[1]; 
 		c = H_INT[2];
@@ -207,6 +222,7 @@ string SHA256::sha_hash(string hexstr) {
 		H_UPD[7] = H_INT[7] + h;
 	}
 
+	// Create hex string
 	stringstream stream;
 	for (auto it : H_UPD) {
 		stream << setfill ('0') << setw(8) << hex << it;
