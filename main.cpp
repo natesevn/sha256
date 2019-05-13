@@ -1,12 +1,48 @@
+#include <openssl/conf.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <openssl/hmac.h>
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <cstring>
 #include <vector>
 #include <array>
 #include <iterator>
 #include <sha256.h>
 
 using namespace std;
+
+/* Library HMAC function */
+int getHmac(unsigned char* msg, unsigned char* key, int keyLen, int msgLen, unsigned char* hmac) {
+
+  	unsigned char* result = new unsigned char[32];
+	unsigned int resultLen = 0;
+	
+	// Get HMAC of data
+  	HMAC(EVP_sha256(), key, keyLen, msg, msgLen, result, &resultLen);
+
+	// Copy result to passed in buffer
+	memcpy(hmac, result, resultLen);
+
+	delete[] result;
+
+	return resultLen;
+}
+
+bool verifyHmac(unsigned char* msg, unsigned char* key, int keyLen, int msgLen, unsigned char* hmac) {
+
+	unsigned char* testhmac = new unsigned char[32];
+	int result = getHmac(msg, key, keyLen, msgLen, testhmac);
+
+	bool isEqual = (memcmp(testhmac, hmac, result) == 0);
+	delete[] testhmac;
+
+	return isEqual;
+}
+
+
+
 
 string textToHex(const string& msg) {
 	ostringstream result;
@@ -63,14 +99,6 @@ string hmac(const string keyHash, const string hexMsg) {
 	return mac;
 }
 
-bool verifyHmac(string mac, string keyHash, string hexMsg) {
-	string testmac = hmac(keyHash, hexMsg);
-	if (testmac.compare(mac) == 0)
-		return true;
-
-	return false;
-}
-
 int main() {
 
 	// test vectors 
@@ -96,9 +124,8 @@ int main() {
 	string hashPass = SHA256::sha_hash(hexPass);
 	string hexMsg = textToHex(mymsg);
 
-	string hmac_val = hmac(hashPass, hexMsg);
-
 	if(option_num == 1) {
+		string hmac_val = hmac(hashPass, hexMsg);
 		cout << "Hash is: " << hmac_val << endl;
 
 	} else if(option_num == 2) {
@@ -107,11 +134,31 @@ int main() {
 		string mymac;
 		getline(cin, mymac);
 
-		if(mymac.compare(hmac_val) == 0) {
-			cout << "HMAC matches" << endl;
+		// Convert message string to unsigned char
+		unsigned char *testMsg = new unsigned char[mymsg.length()];
+		strcpy((char *)testMsg, mymsg.c_str());
+
+		// Convert password hex string to unsigned char
+		const char *tempPass = &hashPass[0];
+		unsigned char testPass[32];
+		for (size_t count = 0; count < sizeof testPass/sizeof *testPass; count++) {
+			sscanf(tempPass, "%2hhx", &testPass[count]);
+			tempPass += 2;
+		}
+
+		// Convert submitted mac hex string to unsigned char
+		const char *tempMac = &mymac[0];
+		unsigned char testHmac[32];
+		for (size_t count = 0; count < sizeof testHmac/sizeof *testHmac; count++) {
+			sscanf(tempMac, "%2hhx", &testHmac[count]);
+			tempMac += 2;
+		}
+		
+		if(verifyHmac(testMsg, testPass, 32, mymsg.length(), testHmac)) {
+			cout << "HMAC verified" << endl;
 		} else {
 			cout << "Invalid HMAC" << endl;
-		}
+		};
 
 	} else {
 		cout << "Invalid option" << endl;
