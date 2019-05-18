@@ -1,4 +1,4 @@
-# HMAC Implementation in C++
+# HMAC-SHA256 Implementation in C++
 Run `run.sh` for a quick demo.
 
 To use:
